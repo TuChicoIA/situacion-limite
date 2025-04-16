@@ -358,6 +358,7 @@ io.on('connection', (socket) => {
     });
 });
 
+// Respuesta básica para comprobar que el servidor está vivo
 app.get('/', (req, res) => {
     res.send('Servidor de Situación Límite funcionando');
 });
