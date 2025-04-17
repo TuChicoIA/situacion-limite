@@ -14,3 +14,6 @@
     "socket.io": "^4.8.1"
   }
 }
+"scripts": {
+  "start": "node server.js"
+}
