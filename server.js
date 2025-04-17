@@ -1,3 +1,5 @@
+console.log('🔥 Arrancando el servidor con el código actualizado');
+
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
