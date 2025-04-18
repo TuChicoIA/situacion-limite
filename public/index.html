@@ -1,246 +1,161 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Situación Límite</title>
-    <style>
-        .hidden {
-            display: none;
-        }
-        .button {
-            background-color: #0066cc;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin: 5px;
-            width: 200px;
-        }
-        .button.selected {
-            background-color: #ff9933;
-        }
-        .button.correct {
-            background-color: #33cc33;
-        }
-        .button.incorrect {
-            background-color: #cc3333;
-        }
-    </style>
-</head>
-<body>
-    <div id="start-screen">
-        <h1>Situación Límite</h1>
-        <button class="button" onclick="showCreateGame()">Comenzar Partida</button>
-        <br>
-        <button class="button" onclick="showJoinGame()">Unir a Partida</button>
-    </div>
+console.log('🔥 Arrancando el servidor con el código actualizado');
 
-    <div id="create-game-screen" class="hidden">
-        <h2>Crear Nueva Partida</h2>
-        <input type="text" id="create-username" placeholder="Tu nombre">
-        <button class="button" onclick="createGame()">Crear Partida</button>
-    </div>
+const express = require('express');
+const app = express();
+const http = require('http').createServer(app);
+const io = require('socket.io')(http);
+const path = require('path');
 
-    <div id="join-game-screen" class="hidden">
-        <h2>Unirse a Partida</h2>
-        <input type="text" id="game-code" placeholder="Código de partida">
-        <input type="text" id="join-username" placeholder="Tu nombre">
-        <button class="button" onclick="joinGame()">Unirse</button>
-    </div>
+app.use(express.static('public'));
 
-    <div id="waiting-screen" class="hidden">
-        <h2>Sala de Espera</h2>
-        <p>Código de la partida: <span id="game-code-display"></span></p>
-        <h3>Jugadores:</h3>
-        <ul id="players-list"></ul>
-        <div id="start-button-container"></div>
-    </div>
+// Almacenamiento en memoria
+const games = new Map(); // Almacena las partidas activas
+const users = new Map(); // Almacena los usuarios conectados
 
-    <div id="game-screen" class="hidden">
-        <h2>Situación Límite</h2>
-        <div id="situation-text"></div>
-        <div id="options-container"></div>
-        <div id="status-text"></div>
-        <div id="scores-container"></div>
-        <div id="end-game-button" class="hidden">
-            <button class="button" onclick="endGame()">Finalizar Partida</button>
-        </div>
-    </div>
+// Base de datos de preguntas
+const questions = [
+  { situation: "1. Estás en un avión cuando, de repente, los motores fallan y empieza a caer en picado. ¿Qué haces?", options: [
+    "A) Agarrarte fuerte al asiento y rezar.",
+    "B) Buscar instrucciones de emergencia y seguirlas.",
+    "C) Intentar calmar a los pasajeros y esperar órdenes.",
+    "D) Saltar sin paracaídas porque el miedo te paraliza."
+  ]},
+  // ... (resto de preguntas) ...
+];
 
-    <div id="results-screen" class="hidden">
-        <h2>Resultados Finales</h2>
-        <div id="final-scores"></div>
-        <button class="button" onclick="location.reload()">Nueva Partida</button>
-    </div>
+/**
+ * Extrae una pregunta aleatoria de las disponibles en la partida
+ * y la elimina para evitar repeticiones.
+ */
+function extractRandomQuestion(game) {
+  const disponibles = game.preguntasRestantes;
+  if (!disponibles || disponibles.length === 0) return null;
+  const idx = Math.floor(Math.random() * disponibles.length);
+  const [pregunta] = disponibles.splice(idx, 1);
+  return pregunta;
+}
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-        let isMainPlayer = false;
-        let currentGameCode = null;
-        let canAnswer = false; // Variable para controlar si los jugadores pueden responder
+// Genera un código aleatorio para la partida
+function generateGameCode() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
 
-        // Funciones de utilidad para mostrar/ocultar pantallas
-        function showScreen(screenId) {
-            document.querySelectorAll('div[id$="-screen"]').forEach(screen => screen.classList.add('hidden'));
-            document.getElementById(screenId).classList.remove('hidden');
-        }
+io.on('connection', (socket) => {
+  console.log('Usuario conectado:', socket.id);
 
-        function showCreateGame() {
-            showScreen('create-game-screen');
-        }
+  // Crear nueva partida
+  socket.on('create_game', (username) => {
+    const gameCode = generateGameCode();
+    const game = {
+      code: gameCode,
+      creator: socket.id,
+      players: [{ id: socket.id, username, points: 0 }],
+      currentPlayer: 0,
+      questionCount: 0,
+      currentQuestion: null,
+      answers: new Map(),
+      status: 'waiting',
+      // Inicializa la lista de preguntas que quedan por usar
+      preguntasRestantes: [...questions]
+    };
 
-        function showJoinGame() {
-            showScreen('join-game-screen');
-        }
+    games.set(gameCode, game);
+    users.set(socket.id, { gameCode, username });
+    socket.join(gameCode);
+    socket.emit('game_created', { gameCode, game });
+  });
 
-        // Crear partida
-        function createGame() {
-            const username = document.getElementById('create-username').value;
-            if (!username) {
-                alert('Por favor, ingresa tu nombre');
-                return;
-            }
-            socket.emit('create_game', username);
-        }
+  // Iniciar partida
+  socket.on('start_game', () => {
+    const user = users.get(socket.id);
+    if (!user) return;
 
-        // Unirse a partida
-        function joinGame() {
-            const gameCode = document.getElementById('game-code').value.toUpperCase();
-            const username = document.getElementById('join-username').value;
-            if (!gameCode || !username) {
-                alert('Por favor, completa todos los campos');
-                return;
-            }
-            socket.emit('join_game', {gameCode, username});
-        }
+    const game = games.get(user.gameCode);
+    if (!game || game.creator !== socket.id) return;
 
-        // Eventos del socket
-        socket.on('game_created', ({gameCode, game}) => {
-            currentGameCode = gameCode;
-            isMainPlayer = true;
-            document.getElementById('game-code-display').textContent = gameCode;
-            updatePlayersList(game.players);
-            showScreen('waiting-screen');
-            document.getElementById('start-button-container').innerHTML = 
-                '<button class="button" onclick="socket.emit(\'start_game\')">Iniciar Partida</button>';
-        });
+    game.status = 'playing';
+    game.waitingForMainPlayer = true;
+    // Extrae la primera pregunta sin repetición
+    game.currentQuestion = extractRandomQuestion(game);
 
-        socket.on('player_joined', (game) => {
-            updatePlayersList(game.players);
-        });
+    io.to(game.code).emit('game_started', game);
+  });
 
-        socket.on('game_started', (game) => {
-            showScreen('game-screen');
-            updateGameScreen(game);
-        });
+  // Manejadores de respuestas y lógica de juego...
+  socket.on('main_player_answer', (answer) => {
+    const user = users.get(socket.id);
+    if (!user) return;
 
-        socket.on('main_player_answered', () => {
-            canAnswer = !isMainPlayer;
-            if (isMainPlayer) {
-                document.getElementById('status-text').textContent = 'Esperando respuestas de los demás jugadores...';
-            } else {
-                document.getElementById('status-text').textContent = 'El jugador principal ha elegido. ¡Adivina su respuesta!';
-                // Habilitar botones para los demás jugadores
-                document.querySelectorAll('#options-container .button').forEach(button => {
-                    button.disabled = false;
-                });
-            }
-        });
+    const game = games.get(user.gameCode);
+    if (!game) return;
 
-        socket.on('round_results', ({mainPlayerAnswer, answers, players}) => {
-            const options = document.querySelectorAll('#options-container .button');
-            options.forEach((button, index) => {
-                if (index === mainPlayerAnswer) {
-                    button.classList.add('correct');
-                } else if (!isMainPlayer && index === answers.find(a => a[0] === socket.id)[1]) {
-                    button.classList.add('incorrect');
-                }
-            });
-            updateScores(players);
-        });
+    const currentPlayer = game.players[game.currentPlayer];
+    if (currentPlayer.id !== socket.id) return;
 
-        socket.on('new_round', (game) => {
-            updateGameScreen(game);
-        });
+    game.mainPlayerAnswer = answer;
+    game.waitingForMainPlayer = false;
+    io.to(game.code).emit('main_player_answered', answer);
+  });
 
-        socket.on('game_over', (players) => {
-            showScreen('results-screen');
-            const scoresHtml = players
-                .sort((a, b) => b.points - a.points)
-                .map(p => `<p>${p.username}: ${p.points} puntos</p>`)
-                .join('');
-            document.getElementById('final-scores').innerHTML = scoresHtml;
-        });
+  $1
 
-        socket.on('error', (message) => {
-            alert(message);
-        });
+  // Finalizar partida
+  socket.on('end_game', () => {
+    const user = users.get(socket.id);
+    if (!user) return;
 
-        // Funciones de actualización de la interfaz
-        function updatePlayersList(players) {
-            const list = document.getElementById('players-list');
-            list.innerHTML = players.map(p => `<li>${p.username}</li>`).join('');
-        }
+    const game = games.get(user.gameCode);
+    if (!game) return;
 
-        function updateGameScreen(game) {
-            const isCurrentPlayer = game.players[game.currentPlayer].id === socket.id;
-            isMainPlayer = isCurrentPlayer;
-            canAnswer = isMainPlayer || !game.waitingForMainPlayer;
-            
-            document.getElementById('situation-text').textContent = game.currentQuestion.situation;
-            const optionsContainer = document.getElementById('options-container');
-            optionsContainer.innerHTML = game.currentQuestion.options
-                .map((option, index) => `
-                    <button class="button" onclick="selectOption(${index})" ${!canAnswer ? 'disabled' : ''}>${option}</button>
-                `).join('');
-            
-            // Mostrar/ocultar botón de finalizar partida
-            const endGameButton = document.getElementById('end-game-button');
-            endGameButton.classList.toggle('hidden', !isMainPlayer);
-            
-            // Actualizar texto de estado
-            let statusText = '';
-            if (isMainPlayer) {
-                statusText = 'Eres el jugador principal. Elige tu respuesta.';
-            } else if (game.waitingForMainPlayer) {
-                statusText = 'Esperando la respuesta del jugador principal...';
-            } else {
-                statusText = 'Adivina la respuesta del jugador principal.';
-            }
-            document.getElementById('status-text').textContent = statusText;
-            
-            updateScores(game.players);
-        }
+    // Permitir finalizar la partida si es el creador o el jugador principal actual
+    const isCreator = game.creator === socket.id;
+    const isCurrentPlayer = game.players[game.currentPlayer].id === socket.id;
+    if (!isCreator && !isCurrentPlayer) return;
 
-        function updateScores(players) {
-            const scoresHtml = players
-                .map(p => `<p>${p.username}: ${p.points} puntos</p>`)
-                .join('');
-            document.getElementById('scores-container').innerHTML = scoresHtml;
-        }
+    io.to(game.code).emit('game_over', game.players);
+    games.delete(game.code);
+  });
 
-        function selectOption(index) {
-            if (!canAnswer) return;
-            
-            const options = document.querySelectorAll('#options-container .button');
-            options.forEach(button => button.classList.remove('selected'));
-            options[index].classList.add('selected');
-            
-            if (isMainPlayer) {
-                socket.emit('main_player_answer', index);
-            } else {
-                socket.emit('player_answer', index);
-            }
-        }
+      io.to(game.code).emit('round_results', {
+        mainPlayerAnswer: game.mainPlayerAnswer,
+        answers: Array.from(game.answers),
+        players: game.players
+      });
 
-        function endGame() {
-            if (isMainPlayer) {
-                socket.emit('end_game');
-            }
-        }
-    </script>
-</body>
-</html>
+      game.questionCount++;
+      game.currentPlayer = (game.currentPlayer + 1) % game.players.length;
+      game.answers.clear();
+
+      if (game.questionCount >= 20 || game.preguntasRestantes.length === 0) {
+        io.to(game.code).emit('game_over', game.players);
+        games.delete(game.code);
+      } else {
+        // Extrae la siguiente pregunta sin repetición
+        game.currentQuestion = extractRandomQuestion(game);
+        setTimeout(() => io.to(game.code).emit('new_round', game), 3000);
+      }
+    }
+  });
+
+  socket.on('disconnect', () => {
+    const user = users.get(socket.id);
+    if (user) {
+      const game = games.get(user.gameCode);
+      if (game) {
+        game.players = game.players.filter(p => p.id !== socket.id);
+        if (game.players.length === 0) games.delete(user.gameCode);
+        else io.to(game.code).emit('player_left', game);
+      }
+      users.delete(socket.id);
+    }
+  });
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => {
+  console.log(`🔥 Servidor corriendo en puerto ${PORT}`);
+});
