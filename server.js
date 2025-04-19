@@ -40,7 +40,8 @@ function generateGameCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-aio.on('connection', (socket) => {
+// Conexión de clientes
+io.on('connection', (socket) => {
   console.log('Usuario conectado:', socket.id);
 
   // Crear nueva partida
@@ -55,7 +56,6 @@ aio.on('connection', (socket) => {
       currentQuestion: null,
       answers: new Map(),
       status: 'waiting',
-      // Inicializa la lista de preguntas que quedan por usar
       preguntasRestantes: [...questions]
     };
 
@@ -72,13 +72,9 @@ aio.on('connection', (socket) => {
       socket.emit('error', 'Código de partida no válido');
       return;
     }
-    // Registrar usuario en memoria
     users.set(socket.id, { gameCode, username });
-    // Añadirlo al array de jugadores
     game.players.push({ id: socket.id, username, points: 0 });
-    // Unir socket a la sala
     socket.join(gameCode);
-    // Notificar a todos en la sala que hay un nuevo jugador
     io.to(gameCode).emit('player_joined', game);
   });
 
@@ -92,13 +88,12 @@ aio.on('connection', (socket) => {
 
     game.status = 'playing';
     game.waitingForMainPlayer = true;
-    // Extrae la primera pregunta sin repetición
     game.currentQuestion = extractRandomQuestion(game);
 
     io.to(game.code).emit('game_started', game);
   });
 
-  // Manejadores de respuestas y lógica de juego...
+  // Respuesta del jugador principal
   socket.on('main_player_answer', (answer) => {
     const user = users.get(socket.id);
     if (!user) return;
@@ -106,14 +101,15 @@ aio.on('connection', (socket) => {
     const game = games.get(user.gameCode);
     if (!game) return;
 
-    const currentPlayer = game.players[game.currentPlayer];
-    if (currentPlayer.id !== socket.id) return;
+    const current = game.players[game.currentPlayer];
+    if (current.id !== socket.id) return;
 
     game.mainPlayerAnswer = answer;
     game.waitingForMainPlayer = false;
     io.to(game.code).emit('main_player_answered', answer);
   });
 
+  // Respuestas de los demás jugadores
   socket.on('player_answer', (answer) => {
     const user = users.get(socket.id);
     if (!user) return;
@@ -124,11 +120,10 @@ aio.on('connection', (socket) => {
     game.answers.set(socket.id, answer);
 
     if (game.answers.size === game.players.length - 1) {
-      // Calcular puntos
-      game.players.forEach(player => {
-        if (player.id !== game.players[game.currentPlayer].id) {
-          if (game.answers.get(player.id) === game.mainPlayerAnswer) {
-            player.points += 5;
+      game.players.forEach(p => {
+        if (p.id !== game.players[game.currentPlayer].id) {
+          if (game.answers.get(p.id) === game.mainPlayerAnswer) {
+            p.points += 5;
           }
         }
       });
@@ -147,13 +142,13 @@ aio.on('connection', (socket) => {
         io.to(game.code).emit('game_over', game.players);
         games.delete(game.code);
       } else {
-        // Extrae la siguiente pregunta sin repetición
         game.currentQuestion = extractRandomQuestion(game);
         setTimeout(() => io.to(game.code).emit('new_round', game), 3000);
       }
     }
   });
 
+  // Desconexión de clientes
   socket.on('disconnect', () => {
     const user = users.get(socket.id);
     if (user) {
@@ -168,10 +163,12 @@ aio.on('connection', (socket) => {
   });
 });
 
+// Ruta principal
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Arranque del servidor
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
   console.log(`🔥 Servidor corriendo en puerto ${PORT}`);
