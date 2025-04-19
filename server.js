@@ -40,7 +40,7 @@ function generateGameCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-io.on('connection', (socket) => {
+aio.on('connection', (socket) => {
   console.log('Usuario conectado:', socket.id);
 
   // Crear nueva partida
@@ -63,6 +63,23 @@ io.on('connection', (socket) => {
     users.set(socket.id, { gameCode, username });
     socket.join(gameCode);
     socket.emit('game_created', { gameCode, game });
+  });
+
+  // Unirse a partida
+  socket.on('join_game', ({ gameCode, username }) => {
+    const game = games.get(gameCode);
+    if (!game) {
+      socket.emit('error', 'Código de partida no válido');
+      return;
+    }
+    // Registrar usuario en memoria
+    users.set(socket.id, { gameCode, username });
+    // Añadirlo al array de jugadores
+    game.players.push({ id: socket.id, username, points: 0 });
+    // Unir socket a la sala
+    socket.join(gameCode);
+    // Notificar a todos en la sala que hay un nuevo jugador
+    io.to(gameCode).emit('player_joined', game);
   });
 
   // Iniciar partida
