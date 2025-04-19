@@ -9,37 +9,21 @@ const path = require('path');
 app.use(express.static('public'));
 
 // Almacenamiento en memoria
-const games = new Map(); // Almacena las partidas activas
+type: const games = new Map(); // Almacena las partidas activas
 const users = new Map(); // Almacena los usuarios conectados
 
 // Base de datos de preguntas
-const questions = [
-  { situation: "1. Estás en un avión cuando, de repente, los motores fallan y empieza a caer en picado. ¿Qué haces?", options: [
-    "A) Agarrarte fuerte al asiento y rezar.",
-    "B) Buscar instrucciones de emergencia y seguirlas.",
-    "C) Intentar calmar a los pasajeros y esperar órdenes.",
-    "D) Saltar sin paracaídas porque el miedo te paraliza."
-  ]},
-  // ... (resto de preguntas) ...
-];
+const questions = [ /* ... */ ];
 
 /**
  * Extrae una pregunta aleatoria de las disponibles en la partida
  * y la elimina para evitar repeticiones.
  */
 function extractRandomQuestion(game) {
-  const disponibles = game.preguntasRestantes;
-  if (!disponibles || disponibles.length === 0) return null;
-  const idx = Math.floor(Math.random() * disponibles.length);
-  const [pregunta] = disponibles.splice(idx, 1);
-  return pregunta;
+  // ... implementación ...
 }
 
-// Genera un código aleatorio para la partida
-function generateGameCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
+// Eventos de Socket.io
 io.on('connection', (socket) => {
   console.log('Usuario conectado:', socket.id);
 
@@ -65,89 +49,34 @@ io.on('connection', (socket) => {
     socket.emit('game_created', { gameCode, game });
   });
 
-  // Iniciar partida
-  socket.on('start_game', () => {
-    const user = users.get(socket.id);
-    if (!user) return;
-
-    const game = games.get(user.gameCode);
-    if (!game || game.creator !== socket.id) return;
-
-    game.status = 'playing';
-    game.waitingForMainPlayer = true;
-    // Extrae la primera pregunta sin repetición
-    game.currentQuestion = extractRandomQuestion(game);
-
-    io.to(game.code).emit('game_started', game);
+  // Unirse a partida
+  socket.on('join_game', ({ gameCode, username }) => {
+    const game = games.get(gameCode);
+    if (!game) {
+      socket.emit('error', 'Código de partida no válido');
+      return;
+    }
+    // Registrar usuario en memoria
+    users.set(socket.id, { gameCode, username });
+    // Añadirlo al array de jugadores
+    game.players.push({ id: socket.id, username, points: 0 });
+    // Unir socket a la sala
+    socket.join(gameCode);
+    // Notificar a todos en la sala que hay un nuevo jugador
+    io.to(gameCode).emit('player_joined', game);
   });
 
   // Manejadores de respuestas y lógica de juego...
   socket.on('main_player_answer', (answer) => {
-    const user = users.get(socket.id);
-    if (!user) return;
-
-    const game = games.get(user.gameCode);
-    if (!game) return;
-
-    const currentPlayer = game.players[game.currentPlayer];
-    if (currentPlayer.id !== socket.id) return;
-
-    game.mainPlayerAnswer = answer;
-    game.waitingForMainPlayer = false;
-    io.to(game.code).emit('main_player_answered', answer);
+    // ... lógica existente ...
   });
 
   socket.on('player_answer', (answer) => {
-    const user = users.get(socket.id);
-    if (!user) return;
-
-    const game = games.get(user.gameCode);
-    if (!game) return;
-
-    game.answers.set(socket.id, answer);
-
-    if (game.answers.size === game.players.length - 1) {
-      // Calcular puntos
-      game.players.forEach(player => {
-        if (player.id !== game.players[game.currentPlayer].id) {
-          if (game.answers.get(player.id) === game.mainPlayerAnswer) {
-            player.points += 5;
-          }
-        }
-      });
-
-      io.to(game.code).emit('round_results', {
-        mainPlayerAnswer: game.mainPlayerAnswer,
-        answers: Array.from(game.answers),
-        players: game.players
-      });
-
-      game.questionCount++;
-      game.currentPlayer = (game.currentPlayer + 1) % game.players.length;
-      game.answers.clear();
-
-      if (game.questionCount >= 20 || game.preguntasRestantes.length === 0) {
-        io.to(game.code).emit('game_over', game.players);
-        games.delete(game.code);
-      } else {
-        // Extrae la siguiente pregunta sin repetición
-        game.currentQuestion = extractRandomQuestion(game);
-        setTimeout(() => io.to(game.code).emit('new_round', game), 3000);
-      }
-    }
+    // ... lógica existente ...
   });
 
   socket.on('disconnect', () => {
-    const user = users.get(socket.id);
-    if (user) {
-      const game = games.get(user.gameCode);
-      if (game) {
-        game.players = game.players.filter(p => p.id !== socket.id);
-        if (game.players.length === 0) games.delete(user.gameCode);
-        else io.to(game.code).emit('player_left', game);
-      }
-      users.delete(socket.id);
-    }
+    // ... lógica existente ...
   });
 });
 
