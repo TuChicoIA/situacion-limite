@@ -81,7 +81,7 @@
         const socket = io();
         let isMainPlayer = false;
         let currentGameCode = null;
-        let canAnswer = false; // Variable para controlar si los jugadores pueden responder
+        let canAnswer = false; // Controla si el jugador puede responder
 
         // Funciones de utilidad para mostrar/ocultar pantallas
         function showScreen(screenId) {
@@ -129,9 +129,7 @@
                 '<button class="button" onclick="socket.emit(\'start_game\')">Iniciar Partida</button>';
         });
 
-        socket.on('player_joined', (game) => {
-            updatePlayersList(game.players);
-        });
+        socket.on('player_joined', (game) => updatePlayersList(game.players));
 
         socket.on('game_started', (game) => {
             showScreen('game-screen');
@@ -144,10 +142,7 @@
                 document.getElementById('status-text').textContent = 'Esperando respuestas de los demás jugadores...';
             } else {
                 document.getElementById('status-text').textContent = 'El jugador principal ha elegido. ¡Adivina su respuesta!';
-                // Habilitar botones para los demás jugadores
-                document.querySelectorAll('#options-container .button').forEach(button => {
-                    button.disabled = false;
-                });
+                document.querySelectorAll('#options-container .button').forEach(button => button.disabled = false);
             }
         });
 
@@ -163,64 +158,61 @@
             updateScores(players);
         });
 
-        socket.on('new_round', (game) => {
-            updateGameScreen(game);
-        });
+        socket.on('new_round', (game) => updateGameScreen(game));
 
         socket.on('game_over', (players) => {
             showScreen('results-screen');
-            const scoresHtml = players
+            document.getElementById('final-scores').innerHTML = players
                 .sort((a, b) => b.points - a.points)
                 .map(p => `<p>${p.username}: ${p.points} puntos</p>`)
                 .join('');
-            document.getElementById('final-scores').innerHTML = scoresHtml;
         });
 
-        socket.on('error', (message) => {
-            alert(message);
-        });
+        socket.on('error', (message) => alert(message));
 
-        // Funciones de actualización de la interfaz
+        // Actualización de jugadores en la sala
         function updatePlayersList(players) {
-            const list = document.getElementById('players-list');
-            list.innerHTML = players.map(p => `<li>${p.username}</li>`).join('');
+            document.getElementById('players-list').innerHTML = 
+                players.map(p => `<li>${p.username}</li>`).join('');
         }
 
+        // Lógica de renderizado del juego
         function updateGameScreen(game) {
+            // Determinar jugador principal
             const isCurrentPlayer = game.players[game.currentPlayer].id === socket.id;
             isMainPlayer = isCurrentPlayer;
             canAnswer = isMainPlayer || !game.waitingForMainPlayer;
-            // Mostrar jugador principal
+
+            // Mostrar jugador principal y situación
             const mainPlayer = game.players[game.currentPlayer].username;
             document.getElementById('main-player-display').textContent = `Jugador principal: ${mainPlayer}`;
-
             document.getElementById('situation-text').textContent = game.currentQuestion.situation;
-            const optionsContainer = document.getElementById('options-container');
-       <script>
-  // dentro de updateGameScreen, tras calcular isMainPlayer y canAnswer…
-  const labels = ['A','B','C','D'];
-  let html;
-  if (isMainPlayer) {
-    // Jugador principal ve el texto completo
-    html = game.currentQuestion.options
-      .map((option, index) => `
-        <button class="button" onclick="selectOption(${index})" ${!canAnswer ? 'disabled' : ''}>${option}</button>
-      `).join('');
-  } else {
-    // Resto de jugadores solo ven A, B, C o D
-    html = labels
-      .map((label, index) => `
-        <button class="button" onclick="selectOption(${index})" ${!canAnswer ? 'disabled' : ''}>${label}</button>
-      `).join('');
-  }
-  optionsContainer.innerHTML = html;
-</script>
 
-            
+            // Render de opciones: texto completo o solo letras
+            const optionsContainer = document.getElementById('options-container');
+            const labels = ['A','B','C','D'];
+            let html;
+            if (isMainPlayer) {
+                html = game.currentQuestion.options
+                    .map((opt, i) => `
+                        <button class="button" onclick="selectOption(${i})" ${!canAnswer ? 'disabled' : ''}>
+                            ${opt}
+                        </button>
+                    `).join('');
+            } else {
+                html = labels
+                    .map((label, i) => `
+                        <button class="button" onclick="selectOption(${i})" ${!canAnswer ? 'disabled' : ''}>
+                            ${label}
+                        </button>
+                    `).join('');
+            }
+            optionsContainer.innerHTML = html;
+
             // Mostrar/ocultar botón de finalizar partida
-            const endGameButton = document.getElementById('end-game-button');
-            endGameButton.classList.toggle('hidden', !isMainPlayer);
-            
+            document.getElementById('end-game-button')
+                .classList.toggle('hidden', !isMainPlayer);
+
             // Actualizar texto de estado
             let statusText = '';
             if (isMainPlayer) {
@@ -231,24 +223,22 @@
                 statusText = 'Adivina la respuesta del jugador principal.';
             }
             document.getElementById('status-text').textContent = statusText;
-            
+
             updateScores(game.players);
         }
 
+        // Mostrar puntuaciones
         function updateScores(players) {
-            const scoresHtml = players
-                .map(p => `<p>${p.username}: ${p.points} puntos</p>`)
-                .join('');
-            document.getElementById('scores-container').innerHTML = scoresHtml;
+            document.getElementById('scores-container').innerHTML = 
+                players.map(p => `<p>${p.username}: ${p.points} puntos</p>`).join('');
         }
 
+        // Selección de opción
         function selectOption(index) {
             if (!canAnswer) return;
-            
             const options = document.querySelectorAll('#options-container .button');
-            options.forEach(button => button.classList.remove('selected'));
+            options.forEach(btn => btn.classList.remove('selected'));
             options[index].classList.add('selected');
-            
             if (isMainPlayer) {
                 socket.emit('main_player_answer', index);
             } else {
@@ -256,10 +246,9 @@
             }
         }
 
+        // Finalizar partida
         function endGame() {
-            if (isMainPlayer) {
-                socket.emit('end_game');
-            }
+            if (isMainPlayer) socket.emit('end_game');
         }
     </script>
 </body>
