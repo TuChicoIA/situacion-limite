@@ -334,7 +334,6 @@ io.on('connection', (socket) => {
       users.delete(socket.id);
     }
   });
-});
 
 // Permitir al jugador principal forzar el fin de la partida
 socket.on('end_game', () => {
@@ -347,7 +346,6 @@ socket.on('end_game', () => {
   io.to(game.code).emit('game_over', game.players);
   games.delete(game.code);
 });
-
 
 // Ruta principal
 app.get('/', (req, res) => {
