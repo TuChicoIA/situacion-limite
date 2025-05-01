@@ -196,10 +196,26 @@
 
             document.getElementById('situation-text').textContent = game.currentQuestion.situation;
             const optionsContainer = document.getElementById('options-container');
-            optionsContainer.innerHTML = game.currentQuestion.options
-                .map((option, index) => `
-                    <button class="button" onclick="selectOption(${index})" ${!canAnswer ? 'disabled' : ''}>${option}</button>
-                `).join('');
+       <script>
+  // dentro de updateGameScreen, tras calcular isMainPlayer y canAnswer…
+  const labels = ['A','B','C','D'];
+  let html;
+  if (isMainPlayer) {
+    // Jugador principal ve el texto completo
+    html = game.currentQuestion.options
+      .map((option, index) => `
+        <button class="button" onclick="selectOption(${index})" ${!canAnswer ? 'disabled' : ''}>${option}</button>
+      `).join('');
+  } else {
+    // Resto de jugadores solo ven A, B, C o D
+    html = labels
+      .map((label, index) => `
+        <button class="button" onclick="selectOption(${index})" ${!canAnswer ? 'disabled' : ''}>${label}</button>
+      `).join('');
+  }
+  optionsContainer.innerHTML = html;
+</script>
+
             
             // Mostrar/ocultar botón de finalizar partida
             const endGameButton = document.getElementById('end-game-button');
