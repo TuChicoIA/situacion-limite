@@ -336,6 +336,19 @@ io.on('connection', (socket) => {
   });
 });
 
+// Permitir al jugador principal forzar el fin de la partida
+socket.on('end_game', () => {
+  const user = users.get(socket.id);
+  if (!user) return;
+  const game = games.get(user.gameCode);
+  // Solo el creador (jugador principal) puede terminarla
+  if (!game || game.creator !== socket.id) return;
+  // Emitir el fin de la partida a todos y limpiar
+  io.to(game.code).emit('game_over', game.players);
+  games.delete(game.code);
+});
+
+
 // Ruta principal
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
