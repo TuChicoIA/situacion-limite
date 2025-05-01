@@ -9,7 +9,7 @@ const path = require('path');
 app.use(express.static('public'));
 
 // Almacenamiento en memoria
-tconst games = new Map(); // Almacena las partidas activas
+const games = new Map(); // Almacena las partidas activas
 const users = new Map(); // Almacena los usuarios conectados
 
 // Base de datos de preguntas
@@ -179,9 +179,7 @@ io.on('connection', (socket) => {
         const user = users.get(socket.id);
         if (!user) return;
         const game = games.get(user.gameCode);
-        // Solo el creador (jugador principal) puede terminarla
         if (!game || game.creator !== socket.id) return;
-        // Emitir el fin de la partida a todos y limpiar
         io.to(game.code).emit('game_over', game.players);
         games.delete(game.code);
     });
