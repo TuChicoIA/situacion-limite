@@ -289,8 +289,11 @@ io.on('connection', (socket) => {
 
         const game = games.get(user.gameCode);
         if (!game) return;
+       
+     // A partir de aquí metes la validación
+    if (game.waitingForMainPlayer) return;
 
-        game.answers.set(socket.id, answer);
+       game.answers.set(socket.id, answer);
 
         if (game.answers.size === game.players.length - 1) {
             game.players.forEach(p => {
